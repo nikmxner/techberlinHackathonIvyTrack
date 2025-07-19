@@ -1,35 +1,80 @@
 export type TransactionStatus = 'success' | 'failed' | 'pending'
-export type ErrorCategory = 'network' | 'validation' | 'authentication' | 'database' | 'timeout' | 'unknown'
+export type ErrorCategory = 'network' | 'validation' | 'authentication' | 'database' | 'timeout' | 'payment' | 'checkout' | 'unknown'
 
+// Basis Transaction Interface basierend auf basic_paying_flow Schema
 export interface Transaction {
-  id: string
-  status: TransactionStatus
-  timestamp: Date | string
-  type: string
-  amount?: number
-  currency?: string
-  errorMessage?: string
+  // Primary identifiers
+  transaction_id: string
+  event_index: string | null
+  
+  // Status und Event Details
+  event_type: string | null
+  time: Date | string | null
+  session_start_time: Date | string | null
+  
+  // Merchant Informationen
+  merchant_id: string | null
+  merchant_name: string | null
+  merchant_category: string | null
+  merchant_requested_locale: string | null
+  merchant_requested_market: string | null
+  
+  // Payment Details
+  total_amount: number | null
+  payment_amount: string | null
+  currency: string | null
+  pis_payment_reference: string | null
+  
+  // User Details
+  user_id: string | null
+  user_location: string | null
+  
+  // Session & Device Details
+  browser: string | null
+  device_type: string | null
+  language: string | null
+  is_guest_mode: boolean | null
+  is_returning_user: boolean | null
+  is_express: boolean | null
+  is_phone_required: boolean | null
+  guest_present: boolean | null
+  token_present: boolean | null
+  token_version: string | null
+  
+  // Error & Failure Information
+  event_failure_message: string | null
+  checkout_session_abort_reason: string | null
+  checkout_session_status_change_reason: string | null
+  
+  // Chatbot Information
+  chatbot_available: string | null
+  chatbot_query: string | null
+  chatbot_response: string | null
+  help_requested: string | null
+  
+  // Computed fields for UI
+  status?: TransactionStatus
   errorCategory?: ErrorCategory
-  stackTrace?: string
   resolutionSteps?: string[]
   isResolved?: boolean
   retryCount?: number
-  metadata: Record<string, any>
-  userId?: string
-  endpoint?: string
   duration?: number
-  responseCode?: number
 }
 
 export interface TransactionFilters {
   status?: TransactionStatus[]
-  category?: ErrorCategory[]
+  event_type?: string[]
+  currency?: string[]
+  errorCategory?: ErrorCategory[]
   dateRange?: {
     start: Date
     end: Date
   }
   search?: string
   showResolved?: boolean
+  device_type?: string[]
+  is_guest_mode?: boolean
+  has_errors?: boolean
 }
 
 export interface TransactionStats {
@@ -38,8 +83,11 @@ export interface TransactionStats {
   failed: number
   pending: number
   successRate: number
-  avgDuration: number
+  avgAmount: number
+  totalVolume: number
   errorsByCategory: Record<ErrorCategory, number>
+  byDeviceType: Record<string, number>
+  byCurrency: Record<string, number>
 }
 
 export interface ResolutionGuide {
@@ -48,47 +96,27 @@ export interface ResolutionGuide {
   category: ErrorCategory
   title: string
   description: string
-  steps: ResolutionStep[]
   estimatedTime: string
   difficulty: 'easy' | 'medium' | 'hard'
-  relatedDocs: DocumentationLink[]
-  generatedAt: Date
+  steps: ResolutionStep[]
+  relatedDocs: string[]
+  automationAvailable?: boolean
 }
 
 export interface ResolutionStep {
   id: string
   title: string
   description: string
-  code?: string
-  isCompleted?: boolean
-  notes?: string
+  action?: string
+  expected_result?: string
+  troubleshooting_tips?: string[]
 }
 
-export interface DocumentationLink {
-  title: string
-  url: string
-  type: 'api' | 'guide' | 'troubleshooting' | 'faq'
-}
-
-export interface TransactionFeedState {
-  transactions: Transaction[]
-  selectedTransaction: Transaction | null
-  filters: TransactionFilters
-  isLoading: boolean
-  error?: string
-  stats: TransactionStats
-}
-
-export interface AIResolutionRequest {
-  transactionId: string
-  errorMessage: string
-  errorCategory: ErrorCategory
-  stackTrace?: string
-  metadata?: Record<string, any>
-}
-
-export interface AIResolutionResponse {
-  guide: ResolutionGuide
-  confidence: number
-  additionalContext?: string
+// Helper type für API Pagination
+export interface TransactionQuery {
+  limit?: number
+  offset?: number
+  orderBy?: 'time' | 'total_amount'
+  orderDirection?: 'asc' | 'desc'
+  filters?: TransactionFilters
 } 

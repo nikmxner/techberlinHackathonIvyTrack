@@ -1,104 +1,69 @@
 'use client'
 
-import { useState } from 'react'
+import { Transaction } from '@/types/transactions'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuCheckboxItem,
-  DropdownMenuTrigger,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-} from '@/components/ui/dropdown-menu'
 import { 
   Search, 
-  Filter, 
+  ChevronLeft, 
+  ChevronRight,
   RefreshCw,
   CheckCircle,
   XCircle,
-  Clock,
-  AlertTriangle
+  Clock
 } from 'lucide-react'
-import { Transaction, TransactionFilters, TransactionStats } from '@/types/transactions'
-import { SuccessItem } from './SuccessItem'
-import { FailedItem } from './FailedItem'
+import { cn } from '@/lib/utils'
 
-interface TransactionFeedProps {
+interface TransactionListProps {
   transactions: Transaction[]
   selectedTransaction: Transaction | null
-  filters: TransactionFilters
-  stats: TransactionStats
+  currentPage: number
+  totalPages: number
+  totalTransactions: number
+  itemsPerPage: number
   isLoading: boolean
+  searchQuery: string
   onTransactionSelect: (transaction: Transaction) => void
-  onFiltersChange: (filters: TransactionFilters) => void
+  onPageChange: (page: number) => void
+  onSearchChange: (query: string) => void
+  onRefresh: () => void
 }
 
-export function TransactionFeed({
+export function TransactionList({
   transactions,
   selectedTransaction,
-  filters,
-  stats,
+  currentPage,
+  totalPages,
+  totalTransactions,
+  itemsPerPage,
   isLoading,
+  searchQuery,
   onTransactionSelect,
-  onFiltersChange
-}: TransactionFeedProps) {
-  const [searchQuery, setSearchQuery] = useState('')
+  onPageChange,
+  onSearchChange,
+  onRefresh
+}: TransactionListProps) {
 
-  // Filter transactions based on current filters and search
-  const filteredTransactions = transactions.filter(transaction => {
-    // Search filter
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase()
-      if (!transaction.id.toLowerCase().includes(query) &&
-          !transaction.errorMessage?.toLowerCase().includes(query) &&
-          !transaction.metadata.userId?.toLowerCase().includes(query)) {
-        return false
-      }
-    }
-
-    // Status filter
-    if (filters.status && filters.status.length > 0) {
-      if (!filters.status.includes(transaction.status)) {
-        return false
-      }
-    }
-
-    // Category filter (for failed transactions)
-    if (filters.category && filters.category.length > 0) {
-      if (!transaction.errorCategory || !filters.category.includes(transaction.errorCategory)) {
-        return false
-      }
-    }
-
-    // Show resolved filter
-    if (filters.showResolved === false && transaction.isResolved) {
-      return false
-    }
-
-    return true
-  })
-
-  // Separate successful and failed transactions for display priority
-  const successfulTransactions = filteredTransactions.filter(t => t.status === 'success')
-  const failedTransactions = filteredTransactions.filter(t => t.status === 'failed')
-  const pendingTransactions = filteredTransactions.filter(t => t.status === 'pending')
-
-  const handleStatusFilter = (status: string, checked: boolean) => {
-    const currentStatus = filters.status || []
-    const newStatus = checked
-      ? [...currentStatus, status as any]
-      : currentStatus.filter(s => s !== status)
-    
-    onFiltersChange({
-      ...filters,
-      status: newStatus.length > 0 ? newStatus : undefined
-    })
+  const formatTimestamp = (timestamp: Date | string | null) => {
+    if (!timestamp) return 'N/A'
+    const date = timestamp instanceof Date ? timestamp : new Date(timestamp)
+    return new Intl.DateTimeFormat('de-DE', {
+      day: '2-digit',
+      month: '2-digit',
+      year: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
+    }).format(date)
   }
 
-  const getStatusIcon = (status: string) => {
+  const formatAmount = (amount: number | null, currency: string | null) => {
+    if (!amount) return 'N/A'
+    return `${amount.toFixed(2)} ${currency || ''}`
+  }
+
+  const getStatusIcon = (status?: string) => {
     switch (status) {
       case 'success':
         return <CheckCircle className="w-4 h-4 text-green-500" />
@@ -107,9 +72,25 @@ export function TransactionFeed({
       case 'pending':
         return <Clock className="w-4 h-4 text-yellow-500" />
       default:
-        return null
+        return <div className="w-4 h-4 rounded-full bg-gray-300" />
     }
   }
+
+  const getStatusBadge = (status?: string) => {
+    switch (status) {
+      case 'success':
+        return <Badge variant="default" className="bg-green-100 text-green-800 hover:bg-green-100">Erfolg</Badge>
+      case 'failed':
+        return <Badge variant="destructive">Fehler</Badge>
+      case 'pending':
+        return <Badge variant="secondary" className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">Ausstehend</Badge>
+      default:
+        return <Badge variant="outline">Unbekannt</Badge>
+    }
+  }
+
+  const startItem = (currentPage - 1) * itemsPerPage + 1
+  const endItem = Math.min(currentPage * itemsPerPage, totalTransactions)
 
   return (
     <div className="flex flex-col h-full">
@@ -117,166 +98,173 @@ export function TransactionFeed({
       <div className="p-4 border-b space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold">Transaction Logs</h2>
-          <Button variant="outline" size="sm">
-            <RefreshCw className="w-4 h-4" />
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={onRefresh}
+            disabled={isLoading}
+          >
+            <RefreshCw className={cn("w-4 h-4 mr-2", isLoading && "animate-spin")} />
+            Aktualisieren
           </Button>
-        </div>
-
-        {/* Stats Overview */}
-        <div className="grid grid-cols-2 gap-2">
-          <div className="text-center p-2 bg-green-50 rounded border">
-            <div className="text-sm font-bold text-green-700">{stats.successRate.toFixed(1)}%</div>
-            <div className="text-xs text-green-600">Erfolgreich</div>
-          </div>
-          <div className="text-center p-2 bg-red-50 rounded border">
-            <div className="text-sm font-bold text-red-700">{stats.failed}</div>
-            <div className="text-xs text-red-600">Fehler</div>
-          </div>
         </div>
 
         {/* Search */}
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
           <Input
-            placeholder="Transaktionen durchsuchen..."
+            placeholder="Nach Transaction ID, User oder Event Typ suchen..."
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => onSearchChange(e.target.value)}
             className="pl-10"
           />
         </div>
 
-        {/* Filters */}
-        <div className="flex gap-2">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm">
-                <Filter className="w-3 h-3 mr-1" />
-                Status
-                {filters.status && filters.status.length > 0 && (
-                  <Badge variant="secondary" className="ml-1 h-4 text-xs">
-                    {filters.status.length}
-                  </Badge>
-                )}
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start">
-              <DropdownMenuLabel>Status filtern</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuCheckboxItem
-                checked={filters.status?.includes('success') || false}
-                onCheckedChange={(checked) => handleStatusFilter('success', checked)}
-              >
-                <CheckCircle className="w-4 h-4 mr-2 text-green-500" />
-                Erfolgreich
-              </DropdownMenuCheckboxItem>
-              <DropdownMenuCheckboxItem
-                checked={filters.status?.includes('failed') || false}
-                onCheckedChange={(checked) => handleStatusFilter('failed', checked)}
-              >
-                <XCircle className="w-4 h-4 mr-2 text-red-500" />
-                Fehlgeschlagen
-              </DropdownMenuCheckboxItem>
-              <DropdownMenuCheckboxItem
-                checked={filters.status?.includes('pending') || false}
-                onCheckedChange={(checked) => handleStatusFilter('pending', checked)}
-              >
-                <Clock className="w-4 h-4 mr-2 text-yellow-500" />
-                Ausstehend
-              </DropdownMenuCheckboxItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-
-          {/* Clear filters */}
-          {(filters.status?.length || searchQuery) && (
-            <Button 
-              variant="ghost" 
-              size="sm"
-              onClick={() => {
-                setSearchQuery('')
-                onFiltersChange({})
-              }}
-            >
-              Zurücksetzen
-            </Button>
+        {/* Stats Summary */}
+        <div className="text-sm text-muted-foreground">
+          {isLoading ? (
+            'Lade Transaktionen...'
+          ) : (
+            `${startItem}-${endItem} von ${totalTransactions} Transaktionen`
           )}
         </div>
       </div>
 
       {/* Transaction List */}
       <ScrollArea className="flex-1">
-        <div className="p-2">
+        <div className="p-2 space-y-1">
           {isLoading ? (
-            <div className="text-center py-8 text-muted-foreground">
-              Lade Transaktionen...
+            <div className="flex items-center justify-center p-8">
+              <RefreshCw className="w-6 h-6 animate-spin text-muted-foreground" />
             </div>
-          ) : filteredTransactions.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              Keine Transaktionen gefunden
+          ) : transactions.length === 0 ? (
+            <div className="text-center p-8 text-muted-foreground">
+              <p>Keine Transaktionen gefunden</p>
             </div>
           ) : (
-            <div className="space-y-1">
-              {/* Failed transactions first (prominent) */}
-              {failedTransactions.length > 0 && (
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2 px-2 py-1 text-xs font-medium text-red-700 bg-red-50 rounded">
-                    <AlertTriangle className="w-3 h-3" />
-                    <span>Fehlgeschlagene Transaktionen ({failedTransactions.length})</span>
+            transactions.map((transaction) => (
+              <div
+                key={`${transaction.transaction_id}-${transaction.event_index}`}
+                className={cn(
+                  'p-3 rounded-lg border cursor-pointer transition-all duration-150',
+                  'hover:bg-muted/50',
+                  selectedTransaction?.transaction_id === transaction.transaction_id && 
+                  selectedTransaction?.event_index === transaction.event_index
+                    ? 'bg-primary/10 border-primary/30'
+                    : 'border-border'
+                )}
+                onClick={() => onTransactionSelect(transaction)}
+              >
+                {/* Header Row - Transaction ID and Status */}
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center space-x-2">
+                    {getStatusIcon(transaction.status)}
+                    <span className="text-sm font-mono font-bold text-foreground truncate">
+                      {transaction.transaction_id}
+                    </span>
+                    <span className="text-xs font-mono bg-muted px-1.5 py-0.5 rounded">
+                      #{transaction.event_index}
+                    </span>
                   </div>
-                  {failedTransactions.map(transaction => (
-                    <FailedItem
-                      key={transaction.id}
-                      transaction={transaction}
-                      isSelected={selectedTransaction?.id === transaction.id}
-                      onSelect={() => onTransactionSelect(transaction)}
-                    />
-                  ))}
+                  {getStatusBadge(transaction.status)}
                 </div>
-              )}
 
-              {/* Pending transactions */}
-              {pendingTransactions.length > 0 && (
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2 px-2 py-1 text-xs font-medium text-yellow-700 bg-yellow-50 rounded">
-                    <Clock className="w-3 h-3" />
-                    <span>Ausstehende Transaktionen ({pendingTransactions.length})</span>
+                {/* Event Type Row */}
+                <div className="mb-1">
+                  <div className="text-sm font-medium text-foreground truncate">
+                    {transaction.event_type || 'Unbekannter Event'}
                   </div>
-                  {pendingTransactions.map(transaction => (
-                    <SuccessItem
-                      key={transaction.id}
-                      transaction={transaction}
-                      isSelected={selectedTransaction?.id === transaction.id}
-                      onSelect={() => onTransactionSelect(transaction)}
-                    />
-                  ))}
                 </div>
-              )}
 
-              {/* Successful transactions (minimal display) */}
-              {successfulTransactions.length > 0 && (
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2 px-2 py-1 text-xs font-medium text-green-700 bg-green-50 rounded">
-                    <CheckCircle className="w-3 h-3" />
-                    <span>Erfolgreiche Transaktionen ({successfulTransactions.length})</span>
+                {/* Amount and Merchant Row */}
+                <div className="flex items-center justify-between mb-1">
+                  <div className="text-sm font-medium text-foreground">
+                    {formatAmount(transaction.total_amount, transaction.currency)}
                   </div>
-                  {successfulTransactions.slice(0, 50).map(transaction => (
-                    <SuccessItem
-                      key={transaction.id}
-                      transaction={transaction}
-                      isSelected={selectedTransaction?.id === transaction.id}
-                      onSelect={() => onTransactionSelect(transaction)}
-                    />
-                  ))}
-                  {successfulTransactions.length > 50 && (
-                    <div className="text-xs text-muted-foreground text-center py-2">
-                      ... und {successfulTransactions.length - 50} weitere erfolgreiche Transaktionen
-                    </div>
-                  )}
+                  <div className="text-xs text-muted-foreground truncate max-w-[120px]">
+                    {transaction.merchant_name || 'Unbekannter Merchant'}
+                  </div>
                 </div>
-              )}
-            </div>
+
+                {/* Timestamp Row */}
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span>{formatTimestamp(transaction.time)}</span>
+                  <span>{transaction.device_type || 'N/A'}</span>
+                </div>
+
+                {/* Error message for failed transactions */}
+                {transaction.status === 'failed' && (
+                  <div className="text-xs text-red-600 truncate mt-2 p-2 bg-red-50 rounded">
+                    {transaction.event_failure_message || transaction.checkout_session_abort_reason || 'Unbekannter Fehler'}
+                  </div>
+                )}
+              </div>
+            ))
           )}
         </div>
       </ScrollArea>
+
+      {/* Pagination Footer */}
+      <div className="border-t p-3">
+        <div className="flex items-center justify-between text-sm">
+          <div className="text-muted-foreground">
+            {currentPage} von {totalPages}
+          </div>
+          
+          <div className="flex items-center space-x-1">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onPageChange(currentPage - 1)}
+              disabled={currentPage <= 1 || isLoading}
+              className="h-8 w-8 p-0"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </Button>
+            
+            {/* Show only 3 page numbers for compact view */}
+            {totalPages > 1 && (
+              <div className="flex items-center space-x-1">
+                {Array.from({ length: Math.min(3, totalPages) }, (_, i) => {
+                  let pageNum;
+                  if (totalPages <= 3) {
+                    pageNum = i + 1;
+                  } else if (currentPage === 1) {
+                    pageNum = i + 1;
+                  } else if (currentPage === totalPages) {
+                    pageNum = totalPages - 2 + i;
+                  } else {
+                    pageNum = currentPage - 1 + i;
+                  }
+                  
+                  return (
+                    <Button
+                      key={pageNum}
+                      variant={currentPage === pageNum ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => onPageChange(pageNum)}
+                      disabled={isLoading}
+                      className="h-8 w-8 p-0 text-xs"
+                    >
+                      {pageNum}
+                    </Button>
+                  );
+                })}
+              </div>
+            )}
+            
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onPageChange(currentPage + 1)}
+              disabled={currentPage >= totalPages || isLoading}
+              className="h-8 w-8 p-0"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </Button>
+          </div>
+        </div>
+      </div>
     </div>
   )
 } 
