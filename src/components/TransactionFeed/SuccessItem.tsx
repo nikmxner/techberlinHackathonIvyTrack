@@ -1,7 +1,7 @@
 'use client'
 
 import { Transaction } from '@/types/transactions'
-import { CheckCircle, Clock, Euro } from 'lucide-react'
+import { CheckCircle, Clock, DollarSign, Euro, PoundSterling, Circle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface SuccessItemProps {
@@ -28,6 +28,27 @@ export function SuccessItem({ transaction, isSelected, onSelect }: SuccessItemPr
       day: '2-digit',
       month: '2-digit'
     }).format(date)
+  }
+
+  const getCurrencyIcon = (currency: string | null) => {
+    switch (currency) {
+      case 'EUR':
+        return <Euro className="w-2.5 h-2.5" />
+      case 'USD':
+        return <DollarSign className="w-2.5 h-2.5" />
+      case 'GBP':
+        return <PoundSterling className="w-2.5 h-2.5" />
+      case 'CHF':
+        return <Circle className="w-2.5 h-2.5" />
+      case 'SEK':
+      case 'NOK':
+      case 'DKK':
+        return <Circle className="w-2.5 h-2.5" />
+      case 'JPY':
+        return <Circle className="w-2.5 h-2.5" />
+      default:
+        return <DollarSign className="w-2.5 h-2.5" />
+    }
   }
 
   const truncateId = (id: string, maxLength: number = 12) => {
@@ -63,12 +84,15 @@ export function SuccessItem({ transaction, isSelected, onSelect }: SuccessItemPr
         {getStatusIcon()}
         <div className="min-w-0 flex-1">
           <div className="text-xs font-mono text-muted-foreground truncate">
-            {truncateId(transaction.id)}
+            {truncateId(transaction.transaction_id)}
           </div>
-          {transaction.amount && (
+          <div className="text-xs text-muted-foreground truncate">
+            {transaction.merchant_name || 'Unknown Merchant'}
+          </div>
+          {transaction.total_amount && (
             <div className="flex items-center gap-1 text-xs text-muted-foreground">
-              <Euro className="w-2.5 h-2.5" />
-              <span>{transaction.amount.toFixed(2)}</span>
+              {getCurrencyIcon(transaction.currency)}
+              <span>{transaction.total_amount.toFixed(2)} {transaction.currency || ''}</span>
             </div>
           )}
         </div>
@@ -76,7 +100,7 @@ export function SuccessItem({ transaction, isSelected, onSelect }: SuccessItemPr
 
       {/* Right side - Timestamp */}
       <div className="text-xs text-muted-foreground">
-        {formatTimestamp(transaction.timestamp)}
+        {transaction.time ? formatTimestamp(transaction.time) : 'N/A'}
       </div>
     </div>
   )
