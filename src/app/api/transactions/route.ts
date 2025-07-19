@@ -9,23 +9,64 @@ export async function GET(request: NextRequest) {
     const limit = Math.min(parseInt(searchParams.get('limit') || '50'), 100)
     const search = searchParams.get('search') || ''
     const merchant_id = searchParams.get('merchant_id') || 'merchant_008'
+    const status_filter = searchParams.get('status_filter') || 'success,failed' // Default: no pending
     
     const offset = (page - 1) * limit
 
     const supabase = await createClient()
 
-    // Build the query with merchant_id filtering
+    // Start with base query
     let query = supabase
       .from('basic_paying_flow')
       .select('*', { count: 'exact' })
       .eq('merchant_id', merchant_id)
-      .order('created_at', { ascending: false })
-      .range(offset, offset + limit - 1)
 
-    // Add search filtering if provided
+    // Add search filtering first if provided
     if (search) {
-      query = query.or(`transaction_id.ilike.%${search}%,event_type.ilike.%${search}%,failure_message.ilike.%${search}%`)
+      query = query.or(`transaction_id.ilike.%${search}%,event_type.ilike.%${search}%,event_failure_message.ilike.%${search}%`)
     }
+
+    // Parse active statuses
+    const activeStatuses = status_filter.split(',').filter(s => s.trim())
+    
+    // Apply status filtering only if not all statuses are selected
+    if (activeStatuses.length > 0 && activeStatuses.length < 3) {
+      if (activeStatuses.length === 1) {
+        // Single status filter
+        if (activeStatuses.includes('success')) {
+          query = query.or('event_type.ilike.%Succeeded%,event_type.ilike.%Completed%')
+        } else if (activeStatuses.includes('failed')) {
+          query = query.or('event_failure_message.not.is.null,checkout_session_abort_reason.not.is.null')
+        } else if (activeStatuses.includes('pending')) {
+          query = query
+            .is('event_failure_message', null)
+            .is('checkout_session_abort_reason', null)
+            .not('event_type', 'ilike', '%Succeeded%')
+            .not('event_type', 'ilike', '%Completed%')
+        }
+      } else if (activeStatuses.length === 2) {
+        // Two status filters - build complex OR
+        if (activeStatuses.includes('success') && activeStatuses.includes('failed')) {
+          // Success OR Failed (exclude pending)
+          query = query.or('event_type.ilike.%Succeeded%,event_type.ilike.%Completed%,event_failure_message.not.is.null,checkout_session_abort_reason.not.is.null')
+        } else if (activeStatuses.includes('success') && activeStatuses.includes('pending')) {
+          // Success OR Pending (exclude failed)
+          query = query
+            .is('event_failure_message', null)
+            .is('checkout_session_abort_reason', null)
+        } else if (activeStatuses.includes('failed') && activeStatuses.includes('pending')) {
+          // Failed OR Pending (exclude success)
+          query = query
+            .not('event_type', 'ilike', '%Succeeded%')
+            .not('event_type', 'ilike', '%Completed%')
+        }
+      }
+    }
+
+    // Apply ordering and pagination
+    query = query
+      .order('time', { ascending: false })
+      .range(offset, offset + limit - 1)
 
     const { data, error, count } = await query
 
@@ -39,8 +80,8 @@ export async function GET(request: NextRequest) {
       transaction_id: row.transaction_id || `tx_${Date.now()}`,
       event_index: row.event_index?.toString() || '0',
       event_type: row.event_type || null,
-      time: row.created_at || null,
-      session_start_time: row.session_start_time || row.created_at || null,
+      time: row.time || null,
+      session_start_time: row.session_start_time || row.time || null,
       merchant_id: row.merchant_id,
       merchant_name: row.merchant_name || null,
       merchant_category: row.merchant_category || null,
@@ -62,15 +103,15 @@ export async function GET(request: NextRequest) {
       guest_present: row.guest_present || false,
       token_present: row.token_present || false,
       token_version: row.token_version || null,
-      event_failure_message: row.event_failure_message || row.failure_message || null,
-      checkout_session_abort_reason: row.checkout_session_abort_reason || row.abort_reason || null,
+      event_failure_message: row.event_failure_message || null,
+      checkout_session_abort_reason: row.checkout_session_abort_reason || null,
       checkout_session_status_change_reason: row.checkout_session_status_change_reason || null,
       chatbot_available: row.chatbot_available || null,
       chatbot_query: row.chatbot_query || null,
       chatbot_response: row.chatbot_response || null,
       help_requested: row.help_requested || null,
-      status: getTransactionStatus(row.event_type, row.event_failure_message || row.failure_message, row.checkout_session_abort_reason || row.abort_reason),
-      errorCategory: getErrorCategory(row.event_failure_message || row.failure_message, row.checkout_session_abort_reason || row.abort_reason)
+      status: getTransactionStatus(row.event_type, row.event_failure_message, row.checkout_session_abort_reason),
+      errorCategory: getErrorCategory(row.event_failure_message, row.checkout_session_abort_reason)
     }))
 
     // Calculate stats
