@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "superglue": {
+      "command": "npx",
+      "args": [
+        "mcp-remote",
+        "https://mcp.superglue.ai",
+        "--header",
+        "Authorization: Bearer 69481a68887a4dffba61c725f9be95f5"
+      ]
+    }
+  }
+} 
