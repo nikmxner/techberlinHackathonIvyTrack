@@ -148,58 +148,56 @@ export function TransactionList({
                 className={cn(
                   'p-3 rounded-lg border cursor-pointer transition-all duration-150',
                   'hover:bg-muted/50',
-                                  selectedTransaction?.transaction_id === transaction.transaction_id && 
-                selectedTransaction?.event_index === transaction.event_index
-                  ? 'bg-primary/10 border-primary/30'
-                  : 'border-border'
+                  selectedTransaction?.transaction_id === transaction.transaction_id && 
+                  selectedTransaction?.event_index === transaction.event_index
+                    ? 'bg-primary/10 border-primary/30'
+                    : 'border-border'
                 )}
                 onClick={() => onTransactionSelect(transaction)}
               >
-                {/* Header Row */}
-                <div className="flex items-center justify-between mb-2">
+                {/* Header Row - Transaction ID and Status */}
+                <div className="flex items-center justify-between mb-1">
                   <div className="flex items-center space-x-2">
                     {getStatusIcon(transaction.status)}
-                    <div className="flex items-center space-x-1">
-                      <span className="text-sm font-mono font-bold text-foreground">
-                        {transaction.transaction_id}
-                      </span>
-                      <span className="text-xs text-muted-foreground">•</span>
-                      <span className="text-xs font-mono bg-muted px-1.5 py-0.5 rounded">
-                        #{transaction.event_index}
-                      </span>
-                    </div>
-                    {getStatusBadge(transaction.status)}
+                    <span className="text-sm font-mono font-bold text-foreground truncate">
+                      {transaction.transaction_id}
+                    </span>
+                    <span className="text-xs font-mono bg-muted px-1.5 py-0.5 rounded">
+                      #{transaction.event_index}
+                    </span>
                   </div>
-                  <div className="text-xs text-muted-foreground">
-                    {formatTimestamp(transaction.time)}
+                  {getStatusBadge(transaction.status)}
+                </div>
+
+                {/* Event Type Row */}
+                <div className="mb-1">
+                  <div className="text-sm font-medium text-foreground truncate">
+                    {transaction.event_type || 'Unbekannter Event'}
                   </div>
                 </div>
 
-                {/* Content Row */}
-                <div className="flex items-center justify-between">
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium text-foreground truncate">
-                      {transaction.event_type || 'Unbekannter Event'}
-                    </div>
-                    <div className="text-xs text-muted-foreground truncate">
-                      {transaction.merchant_name || 'Unbekannter Merchant'}
-                    </div>
-                    {/* Error message for failed transactions */}
-                    {transaction.status === 'failed' && (
-                      <div className="text-xs text-red-600 truncate mt-1">
-                        {transaction.event_failure_message || transaction.checkout_session_abort_reason || 'Unbekannter Fehler'}
-                      </div>
-                    )}
+                {/* Amount and Merchant Row */}
+                <div className="flex items-center justify-between mb-1">
+                  <div className="text-sm font-medium text-foreground">
+                    {formatAmount(transaction.total_amount, transaction.currency)}
                   </div>
-                  <div className="text-right ml-4">
-                    <div className="text-sm font-medium">
-                      {formatAmount(transaction.total_amount, transaction.currency)}
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      {transaction.device_type || 'N/A'}
-                    </div>
+                  <div className="text-xs text-muted-foreground truncate max-w-[120px]">
+                    {transaction.merchant_name || 'Unbekannter Merchant'}
                   </div>
                 </div>
+
+                {/* Timestamp Row */}
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span>{formatTimestamp(transaction.time)}</span>
+                  <span>{transaction.device_type || 'N/A'}</span>
+                </div>
+
+                {/* Error message for failed transactions */}
+                {transaction.status === 'failed' && (
+                  <div className="text-xs text-red-600 truncate mt-2 p-2 bg-red-50 rounded">
+                    {transaction.event_failure_message || transaction.checkout_session_abort_reason || 'Unbekannter Fehler'}
+                  </div>
+                )}
               </div>
             ))
           )}
