@@ -3,24 +3,24 @@
 import { useState } from 'react'
 import { Transaction } from '@/types/transactions'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { ResolutionGuide } from './ResolutionGuide'
+// import { ResolutionGuide } from './ResolutionGuide'
 import { 
   XCircle, 
   Clock, 
-  Euro, 
+  DollarSign, 
   User, 
-  CreditCard, 
-  Globe,
-  Server,
   AlertTriangle,
+  Server,
+  Monitor,
+  Smartphone,
+  Tablet,
   RotateCcw,
-  ExternalLink,
-  CheckCircle,
-  Zap
+  Euro,
+  PoundSterling,
+  Circle
 } from 'lucide-react'
 
 interface FailureDetailsProps {
@@ -28,11 +28,11 @@ interface FailureDetailsProps {
   onTransactionUpdate: (transaction: Transaction) => void
 }
 
-export function FailureDetails({ transaction, onTransactionUpdate }: FailureDetailsProps) {
-  const [isRetrying, setIsRetrying] = useState(false)
+export function FailureDetails({ transaction }: FailureDetailsProps) {
   const [showResolutionGuide, setShowResolutionGuide] = useState(false)
 
-  const formatTimestamp = (timestamp: Date | string) => {
+  const formatTimestamp = (timestamp: Date | string | null) => {
+    if (!timestamp) return 'N/A'
     const date = timestamp instanceof Date ? timestamp : new Date(timestamp)
     return new Intl.DateTimeFormat('de-DE', {
       day: '2-digit',
@@ -44,385 +44,289 @@ export function FailureDetails({ transaction, onTransactionUpdate }: FailureDeta
     }).format(date)
   }
 
-  const formatDuration = (duration?: number) => {
-    if (!duration) return 'N/A'
-    if (duration < 1000) return `${duration}ms`
-    return `${(duration / 1000).toFixed(2)}s`
+  const getCurrencyIcon = (currency: string | null) => {
+    switch (currency) {
+      case 'EUR':
+        return <Euro className="w-4 h-4 text-muted-foreground" />
+      case 'USD':
+        return <DollarSign className="w-4 h-4 text-muted-foreground" />
+      case 'GBP':
+        return <PoundSterling className="w-4 h-4 text-muted-foreground" />
+      case 'CHF':
+        return <Circle className="w-4 h-4 text-muted-foreground" />
+      case 'SEK':
+      case 'NOK':
+      case 'DKK':
+        return <Circle className="w-4 h-4 text-muted-foreground" />
+      case 'JPY':
+        return <Circle className="w-4 h-4 text-muted-foreground" />
+      default:
+        return <DollarSign className="w-4 h-4 text-muted-foreground" />
+    }
   }
 
-  const getCategoryColor = (category?: string) => {
+  const getDeviceIcon = (deviceType: string | null) => {
+    switch (deviceType) {
+      case 'desktop':
+        return <Monitor className="w-4 h-4" />
+      case 'mobile':
+        return <Smartphone className="w-4 h-4" />
+      case 'tablet':
+        return <Tablet className="w-4 h-4" />
+      default:
+        return <Monitor className="w-4 h-4" />
+    }
+  }
+
+  const getErrorMessage = () => {
+    return transaction.event_failure_message || 
+           transaction.checkout_session_abort_reason || 
+           'Unbekannter Fehler'
+  }
+
+  const getErrorCategoryBadge = () => {
+    const category = transaction.errorCategory
     switch (category) {
       case 'network':
-        return 'bg-orange-100 text-orange-800 border-orange-200'
+        return <Badge variant="destructive">Netzwerk</Badge>
       case 'validation':
-        return 'bg-purple-100 text-purple-800 border-purple-200'
+        return <Badge variant="destructive">Validierung</Badge>
       case 'authentication':
-        return 'bg-red-100 text-red-800 border-red-200'
-      case 'database':
-        return 'bg-blue-100 text-blue-800 border-blue-200'
+        return <Badge variant="destructive">Authentifizierung</Badge>
+      case 'payment':
+        return <Badge variant="destructive">Zahlung</Badge>
+      case 'checkout':
+        return <Badge variant="destructive">Checkout</Badge>
       case 'timeout':
-        return 'bg-yellow-100 text-yellow-800 border-yellow-200'
+        return <Badge variant="destructive">Timeout</Badge>
       default:
-        return 'bg-gray-100 text-gray-800 border-gray-200'
+        return <Badge variant="destructive">Fehler</Badge>
     }
   }
-
-  const getCategoryLabel = (category?: string) => {
-    switch (category) {
-      case 'network':
-        return 'Netzwerk-Fehler'
-      case 'validation':
-        return 'Validierungs-Fehler'
-      case 'authentication':
-        return 'Authentifizierungs-Fehler'
-      case 'database':
-        return 'Datenbank-Fehler'
-      case 'timeout':
-        return 'Timeout-Fehler'
-      default:
-        return 'Unbekannter Fehler'
-    }
-  }
-
-  const getPaymentMethodIcon = (method: string) => {
-    switch (method) {
-      case 'card':
-        return <CreditCard className="w-4 h-4" />
-      case 'paypal':
-        return <Globe className="w-4 h-4" />
-      case 'bank_transfer':
-        return <Server className="w-4 h-4" />
-      default:
-        return <CreditCard className="w-4 h-4" />
-    }
-  }
-
-  const getPaymentMethodLabel = (method: string) => {
-    switch (method) {
-      case 'card':
-        return 'Kreditkarte'
-      case 'paypal':
-        return 'PayPal'
-      case 'bank_transfer':
-        return 'Banküberweisung'
-      default:
-        return method
-    }
-  }
-
-  const handleRetry = async () => {
-    setIsRetrying(true)
-    // Simulate retry API call
-    await new Promise(resolve => setTimeout(resolve, 2000))
-    
-    // Update transaction with retry count
-    const updatedTransaction = {
-      ...transaction,
-      retryCount: (transaction.retryCount || 0) + 1
-    }
-    onTransactionUpdate(updatedTransaction)
-    setIsRetrying(false)
-  }
-
-  const handleMarkResolved = () => {
-    const updatedTransaction = {
-      ...transaction,
-      isResolved: true
-    }
-    onTransactionUpdate(updatedTransaction)
-  }
-
-  const documentationLinks = [
-    {
-      title: 'Payment API Documentation',
-      url: '#',
-      type: 'api' as const
-    },
-    {
-      title: 'Error Handling Guide',
-      url: '#',
-      type: 'guide' as const
-    },
-    {
-      title: 'Troubleshooting Common Issues',
-      url: '#',
-      type: 'troubleshooting' as const
-    },
-    {
-      title: 'FAQ - Payment Failures',
-      url: '#',
-      type: 'faq' as const
-    }
-  ]
 
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-3">
-          <XCircle className="w-6 h-6 text-red-500" />
-          <div>
-            <h1 className="text-xl font-semibold text-red-700">Transaktion fehlgeschlagen</h1>
-            <p className="text-sm text-muted-foreground">
-              ID: {transaction.id}
-            </p>
-          </div>
+      <div className="flex items-center space-x-3">
+        <XCircle className="w-6 h-6 text-red-500" />
+        <div>
+          <h1 className="text-xl font-semibold text-red-700">Event fehlgeschlagen</h1>
+          <p className="text-sm text-muted-foreground">
+            ID: {transaction.transaction_id} • Event #{transaction.event_index}
+          </p>
         </div>
-        
-        {transaction.isResolved && (
-          <Badge className="bg-green-100 text-green-800 border-green-200">
-            <CheckCircle className="w-3 h-3 mr-1" />
-            Behoben
-          </Badge>
-        )}
       </div>
 
-      {/* Error Summary */}
+      {/* Error Info */}
       <Card className="border-red-200 bg-red-50">
         <CardHeader>
-          <CardTitle className="text-base text-red-800 flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4" />
-            Fehlerdetails
-          </CardTitle>
+          <CardTitle className="text-base text-red-800">Fehlerdetails</CardTitle>
+          <CardDescription>Informationen zu dem aufgetretenen Fehler</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-3">
-          <div>
-            <div className="text-xs font-medium text-red-700 uppercase tracking-wider">
-              Fehlermeldung
-            </div>
-            <p className="text-sm text-red-800 mt-1 font-medium">
-              {transaction.errorMessage}
-            </p>
-          </div>
-
-          <div className="flex items-center justify-between">
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
             <div>
-              <div className="text-xs font-medium text-red-700 uppercase tracking-wider">
+              <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                Status
+              </div>
+              <div className="flex items-center gap-2 mt-1">
+                <Badge variant="destructive">
+                  <XCircle className="w-3 h-3 mr-1" />
+                  Fehlgeschlagen
+                </Badge>
+              </div>
+            </div>
+            
+            <div>
+              <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
                 Kategorie
               </div>
               <div className="mt-1">
-                <Badge 
-                  variant="outline" 
-                  className={getCategoryColor(transaction.errorCategory)}
-                >
-                  {getCategoryLabel(transaction.errorCategory)}
-                </Badge>
+                {getErrorCategoryBadge()}
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
+              Fehlermeldung
+            </div>
+            <div className="bg-red-100 border border-red-200 rounded p-3">
+              <p className="text-sm text-red-800 font-medium">
+                {getErrorMessage()}
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                Event Typ
+              </div>
+              <div className="mt-1">
+                <span className="text-sm font-medium">{transaction.event_type || 'Unbekannt'}</span>
               </div>
             </div>
 
             <div>
-              <div className="text-xs font-medium text-red-700 uppercase tracking-wider">
-                Response Code
+              <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                Zeitstempel
+              </div>
+              <div className="flex items-center gap-2 mt-1">
+                <Clock className="w-4 h-4 text-muted-foreground" />
+                <span className="text-sm">{formatTimestamp(transaction.time)}</span>
+              </div>
+            </div>
+          </div>
+
+          {transaction.total_amount && (
+            <div>
+              <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                Betroffener Betrag
+              </div>
+              <div className="flex items-center gap-2 mt-1">
+                {getCurrencyIcon(transaction.currency)}
+                <span className="text-lg font-semibold">
+                  {transaction.total_amount.toFixed(2)} {transaction.currency || ''}
+                </span>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Merchant Info */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Merchant Details</CardTitle>
+          <CardDescription>Informationen zum betroffenen Händler</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                Merchant Name
               </div>
               <div className="mt-1">
-                <Badge variant="outline" className="bg-red-100 text-red-800 border-red-200">
-                  {transaction.responseCode}
-                </Badge>
+                <span className="text-sm font-medium">{transaction.merchant_name || 'Unbekannt'}</span>
+              </div>
+            </div>
+            
+            <div>
+              <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                Merchant ID
+              </div>
+              <div className="mt-1">
+                <span className="text-sm font-mono">{transaction.merchant_id || 'N/A'}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                Kategorie
+              </div>
+              <div className="mt-1">
+                <Badge variant="secondary">{transaction.merchant_category || 'Unbekannt'}</Badge>
+              </div>
+            </div>
+
+            <div>
+              <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                Markt
+              </div>
+              <div className="mt-1">
+                <span className="text-sm">{transaction.merchant_requested_market || 'N/A'}</span>
               </div>
             </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* Tabs for Details and Resolution */}
-      <Tabs defaultValue="details" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="details">Transaktionsdetails</TabsTrigger>
-          <TabsTrigger value="resolution">Lösungsanleitung</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="details" className="space-y-4">
-          {/* Transaction Details */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Transaktionsinformationen</CardTitle>
-              <CardDescription>Grundlegende Details zur fehlgeschlagenen Transaktion</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                    Status
-                  </div>
-                  <div className="flex items-center gap-2 mt-1">
-                    <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">
-                      <XCircle className="w-3 h-3 mr-1" />
-                      Fehlgeschlagen
-                    </Badge>
-                  </div>
-                </div>
-                
-                <div>
-                  <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                    Zeitstempel
-                  </div>
-                  <div className="flex items-center gap-2 mt-1">
-                    <Clock className="w-4 h-4 text-muted-foreground" />
-                    <span className="text-sm">{formatTimestamp(transaction.timestamp)}</span>
-                  </div>
-                </div>
+      {/* Session Info */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Session Details</CardTitle>
+          <CardDescription>Technische Informationen zur Session</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                User ID
               </div>
-
-              {transaction.amount && (
-                <div>
-                  <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                    Betrag
-                  </div>
-                  <div className="flex items-center gap-2 mt-1">
-                    <Euro className="w-4 h-4 text-muted-foreground" />
-                    <span className="text-lg font-semibold">
-                      {transaction.amount.toFixed(2)} {transaction.currency}
-                    </span>
-                  </div>
-                </div>
-              )}
-
-              <Separator />
-
-              <div className="grid grid-cols-2 gap-4">
-                {transaction.duration && (
-                  <div>
-                    <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                      Verarbeitungszeit
-                    </div>
-                    <div className="flex items-center gap-2 mt-1">
-                      <Zap className="w-4 h-4 text-muted-foreground" />
-                      <span className="text-sm">{formatDuration(transaction.duration)}</span>
-                    </div>
-                  </div>
-                )}
-
-                {transaction.retryCount !== undefined && (
-                  <div>
-                    <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                      Wiederholungsversuche
-                    </div>
-                    <div className="flex items-center gap-2 mt-1">
-                      <RotateCcw className="w-4 h-4 text-muted-foreground" />
-                      <span className="text-sm">{transaction.retryCount}</span>
-                    </div>
-                  </div>
-                )}
+              <div className="mt-1">
+                <span className="text-sm font-mono">{transaction.user_id || 'N/A'}</span>
               </div>
-            </CardContent>
-          </Card>
-
-          {/* Stack Trace */}
-          {transaction.stackTrace && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Stack Trace</CardTitle>
-                <CardDescription>Technische Details zum Fehler</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <pre className="text-xs bg-muted p-3 rounded overflow-x-auto whitespace-pre-wrap">
-                  {transaction.stackTrace}
-                </pre>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Metadata */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Kontext-Informationen</CardTitle>
-              <CardDescription>Zusätzliche Metadaten zur Transaktion</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {transaction.metadata.userId && (
-                <div>
-                  <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                    Benutzer
-                  </div>
-                  <div className="flex items-center gap-2 mt-1">
-                    <User className="w-4 h-4 text-muted-foreground" />
-                    <span className="text-sm font-mono">{transaction.metadata.userId}</span>
-                  </div>
-                </div>
-              )}
-
-              {transaction.metadata.paymentMethod && (
-                <div>
-                  <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                    Zahlungsmethode
-                  </div>
-                  <div className="flex items-center gap-2 mt-1">
-                    {getPaymentMethodIcon(transaction.metadata.paymentMethod)}
-                    <span className="text-sm">{getPaymentMethodLabel(transaction.metadata.paymentMethod)}</span>
-                  </div>
-                </div>
-              )}
-
-              {transaction.metadata.userAgent && (
-                <div>
-                  <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                    User Agent
-                  </div>
-                  <div className="mt-1">
-                    <code className="text-xs bg-muted px-2 py-1 rounded break-all">
-                      {transaction.metadata.userAgent}
-                    </code>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Actions */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Aktionen</CardTitle>
-              <CardDescription>Verfügbare Optionen für diese Transaktion</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex gap-2">
-                <Button 
-                  onClick={handleRetry}
-                  disabled={isRetrying}
-                  size="sm"
-                >
-                  {isRetrying ? (
-                    <>
-                      <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white mr-2"></div>
-                      Wiederhole...
-                    </>
-                  ) : (
-                    <>
-                      <RotateCcw className="w-4 h-4 mr-2" />
-                      Wiederholen
-                    </>
-                  )}
-                </Button>
-
-                {!transaction.isResolved && (
-                  <Button 
-                    onClick={handleMarkResolved}
-                    variant="outline"
-                    size="sm"
-                  >
-                    <CheckCircle className="w-4 h-4 mr-2" />
-                    Als behoben markieren
-                  </Button>
-                )}
+            </div>
+            
+            <div>
+              <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                Device
               </div>
-
-              <div className="text-xs text-muted-foreground">
-                <p>
-                  • Wiederholen führt eine neue Verarbeitung mit denselben Parametern durch
-                  • Als behoben markieren entfernt diese Transaktion aus der aktiven Fehlerliste
-                </p>
+              <div className="flex items-center gap-2 mt-1">
+                {getDeviceIcon(transaction.device_type)}
+                <span className="text-sm">{transaction.device_type || 'Unbekannt'}</span>
               </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
+            </div>
+          </div>
 
-        <TabsContent value="resolution" className="space-y-4">
-          <ResolutionGuide 
-            transaction={transaction}
-            documentationLinks={documentationLinks}
-          />
-        </TabsContent>
-      </Tabs>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                Browser
+              </div>
+              <div className="mt-1">
+                <span className="text-sm">{transaction.browser || 'N/A'}</span>
+              </div>
+            </div>
+
+            <div>
+              <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                Session Start
+              </div>
+              <div className="mt-1">
+                <span className="text-sm">{formatTimestamp(transaction.session_start_time)}</span>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* AI Resolution Guide */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Lösungsunterstützung</CardTitle>
+          <CardDescription>AI-gestützte Hilfe zur Problemlösung</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {!showResolutionGuide ? (
+            <Button 
+              onClick={() => setShowResolutionGuide(true)}
+              className="w-full"
+              variant="outline"
+            >
+              <AlertTriangle className="w-4 h-4 mr-2" />
+              AI Resolution Guide generieren
+            </Button>
+                     ) : (
+             <div className="text-center p-4 bg-muted/50 rounded">
+               <p className="text-sm text-muted-foreground">
+                 AI Resolution Guide wird generiert...
+               </p>
+               <Button 
+                 variant="ghost" 
+                 size="sm" 
+                 className="mt-2"
+                 onClick={() => setShowResolutionGuide(false)}
+               >
+                 Schließen
+               </Button>
+             </div>
+           )}
+        </CardContent>
+      </Card>
     </div>
   )
 } 
