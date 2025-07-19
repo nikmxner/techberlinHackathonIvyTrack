@@ -200,126 +200,52 @@ export async function POST(request: NextRequest) {
         // Process results and format response
         let response: MCPQueryResponse
 
-        if (results && results.success) {
+        if (results && results.success && results.data) {
             try {
-                // Extract data from stepResults instead of results.data
-                let workflowData = results.data || {}
+                // Superglue returns perfectly structured data in results.data
+                const superglueData = results.data
                 
-                // Extract SQL query from Superglue stepResults
+                // Debug: Log the exact structure we're working with
+                console.log('🚀 SUPERGLUE DATA STRUCTURE:')
+                console.log('superglueData:', JSON.stringify(superglueData, null, 2))
+                console.log('superglueData.data length:', superglueData.data ? superglueData.data.length : 'NO DATA')
+                console.log('superglueData.data sample:', superglueData.data ? superglueData.data[0] : 'NO DATA')
+                
+                // Extract SQL from config steps for display
                 let actualQuery = "Generated SQL query"
-                let allQueries: string[] = []
-                
-                // Log the full results for debugging
-                console.log('Superglue results structure:', JSON.stringify(results, null, 2))
-                
-                // Extract SQL from stepResults - this is where the real queries are
-                if (results.stepResults && Array.isArray(results.stepResults)) {
-                    console.log('Found stepResults:', results.stepResults.length)
-                    
-                    for (const step of results.stepResults) {
-                        console.log(`Checking step: ${step.stepId}`)
-                        
-                        // Look for SQL in step configuration
-                        if (step.query) {
-                            allQueries.push(step.query)
-                        }
-                        if (step.sql) {
-                            allQueries.push(step.sql)
-                        }
-                    }
-                }
-                
-                // Extract SQL from workflow steps/config
                 if (results.config && results.config.steps) {
-                    console.log('Found config steps:', results.config.steps.length)
-                    
                     for (const step of results.config.steps) {
-                        // Check apiConfig for SQL
                         if (step.apiConfig && step.apiConfig.body) {
                             try {
-                                // Try to parse JSON body
                                 const bodyObj = JSON.parse(step.apiConfig.body)
                                 if (bodyObj.query && bodyObj.query.trim().toLowerCase().startsWith('select')) {
-                                    allQueries.push(bodyObj.query)
-                                    console.log(`Found SQL in step ${step.stepId}:`, bodyObj.query)
+                                    actualQuery = bodyObj.query
                                 }
                             } catch {
-                                // Check if body is direct SQL
-                                if (typeof step.apiConfig.body === 'string' && 
-                                    step.apiConfig.body.trim().toLowerCase().startsWith('select')) {
-                                    allQueries.push(step.apiConfig.body)
-                                    console.log(`Found direct SQL in step ${step.stepId}:`, step.apiConfig.body)
-                                }
+                                // Continue searching
                             }
-                        }
-                        
-                        // Check other possible SQL locations
-                        if (step.query) {
-                            allQueries.push(step.query)
-                        }
-                        if (step.sql) {
-                            allQueries.push(step.sql)
                         }
                     }
                 }
                 
-                // Use the last (most complex) query if multiple found
-                if (allQueries.length > 0) {
-                    actualQuery = allQueries[allQueries.length - 1]
-                    console.log('Using SQL query:', actualQuery)
-                } else {
-                    console.log('No SQL queries found in Superglue response')
-                }
-                
-                // Extract actual data from stepResults
-                let extractedData: any[] = []
-                let columns: string[] = []
-                let dataTypes: string[] = []
-                
-                if (results.stepResults && Array.isArray(results.stepResults)) {
-                    // Find the step with the most meaningful data (usually the last step)
-                    for (const step of results.stepResults) {
-                        if (step.rawData && Array.isArray(step.rawData) && step.rawData.length > 0) {
-                            extractedData = step.rawData
-                            console.log(`Using data from step ${step.stepId}:`, extractedData.length, 'rows')
-                            
-                            // Extract columns from first data row
-                            if (extractedData[0] && typeof extractedData[0] === 'object') {
-                                columns = Object.keys(extractedData[0])
-                                dataTypes = columns.map(() => 'string') // Default to string, could be improved
-                            }
-                            break // Use the first step with data
-                        }
-                    }
-                }
-                
-                // Fallback to workflowData if no stepResults data found
-                if (extractedData.length === 0 && workflowData.data) {
-                    extractedData = workflowData.data
-                    columns = workflowData.metadata?.columns || []
-                    dataTypes = workflowData.metadata?.dataTypes || []
-                }
-                
-                console.log('Final extracted data:', extractedData.length, 'rows')
-                console.log('Columns:', columns)
-                
+                // Use Superglue's structured response directly
                 response = {
                     prompt: body.prompt,
-                    query: actualQuery,
-                    data: extractedData,
+                    query: superglueData.query || actualQuery,
+                    data: superglueData.data || [],
                     metadata: {
-                        rowCount: extractedData.length,
-                        columns: columns,
-                        dataTypes: dataTypes,
+                        rowCount: superglueData.metadata?.rowCount || (superglueData.data ? superglueData.data.length : 0),
+                        columns: superglueData.metadata?.columns || (superglueData.data && superglueData.data[0] ? Object.keys(superglueData.data[0]) : []),
+                        dataTypes: superglueData.metadata?.dataTypes || [],
                         executionTime: executionTime
                     },
                     visualization: {
-                        suggestedCharts: extractedData.length > 0 ? ["bar", "line", "table"] : ["table"],
-                        chartConfig: extractedData.length > 0 ? { 
+                        suggestedCharts: superglueData.visualization?.suggestedCharts || ["bar", "line", "table"],
+                        chartConfig: superglueData.visualization?.chartConfig || {
                             type: "bar",
-                            xAxis: columns[0] || 'x',
-                            yAxis: columns[1] || 'y'
-                        } : {}
+                            xAxis: superglueData.data && superglueData.data[0] ? Object.keys(superglueData.data[0])[0] : 'x',
+                            yAxis: superglueData.data && superglueData.data[0] ? Object.keys(superglueData.data[0])[1] : 'y'
+                        }
                     }
                 }
             } catch (parseError) {
