@@ -6,18 +6,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
-// import { ResolutionGuide } from './ResolutionGuide'
-import { 
-  XCircle, 
-  Clock, 
-  DollarSign, 
-  User, 
+import {
+  XCircle,
+  Clock,
+  DollarSign,
   AlertTriangle,
-  Server,
+  Loader2,
   Monitor,
   Smartphone,
   Tablet,
-  RotateCcw,
   Euro,
   PoundSterling,
   Circle
@@ -29,8 +26,12 @@ interface FailureDetailsProps {
 }
 
 export function FailureDetails({ transaction }: FailureDetailsProps) {
-  const [showResolutionGuide, setShowResolutionGuide] = useState(false)
+  // --- New state for AI generation ---
+  const [isGenerating, setIsGenerating] = useState(false)
+  const [explanation, setExplanation] = useState<string | null>(null)
+  const [fixes, setFixes] = useState<string[]>([])
 
+  // --- Helpers from your original file ---
   const formatTimestamp = (timestamp: Date | string | null) => {
     if (!timestamp) return 'N/A'
     const date = timestamp instanceof Date ? timestamp : new Date(timestamp)
@@ -40,67 +41,64 @@ export function FailureDetails({ transaction }: FailureDetailsProps) {
       year: 'numeric',
       hour: '2-digit',
       minute: '2-digit',
-      second: '2-digit'
+      second: '2-digit',
     }).format(date)
   }
 
   const getCurrencyIcon = (currency: string | null) => {
     switch (currency) {
-      case 'EUR':
-        return <Euro className="w-4 h-4 text-muted-foreground" />
-      case 'USD':
-        return <DollarSign className="w-4 h-4 text-muted-foreground" />
-      case 'GBP':
-        return <PoundSterling className="w-4 h-4 text-muted-foreground" />
-      case 'CHF':
+      case 'EUR': return <Euro className="w-4 h-4 text-muted-foreground" />
+      case 'USD': return <DollarSign className="w-4 h-4 text-muted-foreground" />
+      case 'GBP': return <PoundSterling className="w-4 h-4 text-muted-foreground" />
+      case 'CHF': case 'SEK': case 'NOK': case 'DKK': case 'JPY':
         return <Circle className="w-4 h-4 text-muted-foreground" />
-      case 'SEK':
-      case 'NOK':
-      case 'DKK':
-        return <Circle className="w-4 h-4 text-muted-foreground" />
-      case 'JPY':
-        return <Circle className="w-4 h-4 text-muted-foreground" />
-      default:
-        return <DollarSign className="w-4 h-4 text-muted-foreground" />
+      default: return <DollarSign className="w-4 h-4 text-muted-foreground" />
     }
   }
 
   const getDeviceIcon = (deviceType: string | null) => {
     switch (deviceType) {
-      case 'desktop':
-        return <Monitor className="w-4 h-4" />
-      case 'mobile':
-        return <Smartphone className="w-4 h-4" />
-      case 'tablet':
-        return <Tablet className="w-4 h-4" />
-      default:
-        return <Monitor className="w-4 h-4" />
+      case 'desktop': return <Monitor className="w-4 h-4" />
+      case 'mobile':  return <Smartphone className="w-4 h-4" />
+      case 'tablet':  return <Tablet className="w-4 h-4" />
+      default:        return <Monitor className="w-4 h-4" />
     }
   }
 
-  const getErrorMessage = () => {
-    return transaction.event_failure_message || 
-           transaction.checkout_session_abort_reason || 
-           'Unbekannter Fehler'
-  }
+  const getErrorMessage = () =>
+    transaction.event_failure_message ||
+    transaction.checkout_session_abort_reason ||
+    'Unbekannter Fehler'
 
   const getErrorCategoryBadge = () => {
-    const category = transaction.errorCategory
-    switch (category) {
-      case 'network':
-        return <Badge variant="destructive">Netzwerk</Badge>
-      case 'validation':
-        return <Badge variant="destructive">Validierung</Badge>
-      case 'authentication':
-        return <Badge variant="destructive">Authentifizierung</Badge>
-      case 'payment':
-        return <Badge variant="destructive">Zahlung</Badge>
-      case 'checkout':
-        return <Badge variant="destructive">Checkout</Badge>
-      case 'timeout':
-        return <Badge variant="destructive">Timeout</Badge>
-      default:
-        return <Badge variant="destructive">Fehler</Badge>
+    switch (transaction.errorCategory) {
+      case 'network':        return <Badge variant="destructive">Netzwerk</Badge>
+      case 'validation':     return <Badge variant="destructive">Validierung</Badge>
+      case 'authentication': return <Badge variant="destructive">Authentifizierung</Badge>
+      case 'payment':        return <Badge variant="destructive">Zahlung</Badge>
+      case 'checkout':       return <Badge variant="destructive">Checkout</Badge>
+      case 'timeout':        return <Badge variant="destructive">Timeout</Badge>
+      default:               return <Badge variant="destructive">Fehler</Badge>
+    }
+  }
+
+  // --- New handler to call your API route ---
+  const handleGenerate = async () => {
+    setIsGenerating(true)
+    try {
+      const res = await fetch('/api/generate-solution', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ errorMessage: getErrorMessage() }),
+      })
+      const data = await res.json()
+      setExplanation(data.explanation)
+      setFixes(data.fixes)
+    } catch (err) {
+      console.error(err)
+      setExplanation('Fehler beim Generieren. Bitte später erneut versuchen.')
+    } finally {
+      setIsGenerating(false)
     }
   }
 
@@ -129,21 +127,18 @@ export function FailureDetails({ transaction }: FailureDetailsProps) {
               <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
                 Status
               </div>
-              <div className="flex items-center gap-2 mt-1">
+              <div className="mt-1 flex items-center gap-2">
                 <Badge variant="destructive">
                   <XCircle className="w-3 h-3 mr-1" />
                   Fehlgeschlagen
                 </Badge>
               </div>
             </div>
-            
             <div>
               <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
                 Kategorie
               </div>
-              <div className="mt-1">
-                {getErrorCategoryBadge()}
-              </div>
+              <div className="mt-1">{getErrorCategoryBadge()}</div>
             </div>
           </div>
 
@@ -164,30 +159,31 @@ export function FailureDetails({ transaction }: FailureDetailsProps) {
                 Event Typ
               </div>
               <div className="mt-1">
-                <span className="text-sm font-medium">{transaction.event_type || 'Unbekannt'}</span>
+                <span className="text-sm font-medium">
+                  {transaction.event_type || 'Unbekannt'}
+                </span>
               </div>
             </div>
-
             <div>
               <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
                 Zeitstempel
               </div>
-              <div className="flex items-center gap-2 mt-1">
+              <div className="mt-1 flex items-center gap-2">
                 <Clock className="w-4 h-4 text-muted-foreground" />
                 <span className="text-sm">{formatTimestamp(transaction.time)}</span>
               </div>
             </div>
           </div>
 
-          {transaction.total_amount && (
+          {transaction.total_amount != null && (
             <div>
               <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
                 Betroffener Betrag
               </div>
-              <div className="flex items-center gap-2 mt-1">
+              <div className="mt-1 flex items-center gap-2">
                 {getCurrencyIcon(transaction.currency)}
                 <span className="text-lg font-semibold">
-                  {transaction.total_amount.toFixed(2)} {transaction.currency || ''}
+                  {transaction.total_amount.toFixed(2)} {transaction.currency}
                 </span>
               </div>
             </div>
@@ -208,36 +204,41 @@ export function FailureDetails({ transaction }: FailureDetailsProps) {
                 Merchant Name
               </div>
               <div className="mt-1">
-                <span className="text-sm font-medium">{transaction.merchant_name || 'Unbekannt'}</span>
+                <span className="text-sm font-medium">
+                  {transaction.merchant_name || 'Unbekannt'}
+                </span>
               </div>
             </div>
-            
             <div>
               <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
                 Merchant ID
               </div>
               <div className="mt-1">
-                <span className="text-sm font-mono">{transaction.merchant_id || 'N/A'}</span>
+                <span className="text-sm font-mono">
+                  {transaction.merchant_id || 'N/A'}
+                </span>
               </div>
             </div>
           </div>
-
           <div className="grid grid-cols-2 gap-4">
             <div>
               <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
                 Kategorie
               </div>
               <div className="mt-1">
-                <Badge variant="secondary">{transaction.merchant_category || 'Unbekannt'}</Badge>
+                <Badge variant="secondary">
+                  {transaction.merchant_category || 'Unbekannt'}
+                </Badge>
               </div>
             </div>
-
             <div>
               <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
                 Markt
               </div>
               <div className="mt-1">
-                <span className="text-sm">{transaction.merchant_requested_market || 'N/A'}</span>
+                <span className="text-sm">
+                  {transaction.merchant_requested_market || 'N/A'}
+                </span>
               </div>
             </div>
           </div>
@@ -257,21 +258,23 @@ export function FailureDetails({ transaction }: FailureDetailsProps) {
                 User ID
               </div>
               <div className="mt-1">
-                <span className="text-sm font-mono">{transaction.user_id || 'N/A'}</span>
+                <span className="text-sm font-mono">
+                  {transaction.user_id || 'N/A'}
+                </span>
               </div>
             </div>
-            
             <div>
               <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
                 Device
               </div>
-              <div className="flex items-center gap-2 mt-1">
+              <div className="mt-1 flex items-center gap-2">
                 {getDeviceIcon(transaction.device_type)}
-                <span className="text-sm">{transaction.device_type || 'Unbekannt'}</span>
+                <span className="text-sm">
+                  {transaction.device_type || 'Unbekannt'}
+                </span>
               </div>
             </div>
           </div>
-
           <div className="grid grid-cols-2 gap-4">
             <div>
               <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
@@ -281,13 +284,14 @@ export function FailureDetails({ transaction }: FailureDetailsProps) {
                 <span className="text-sm">{transaction.browser || 'N/A'}</span>
               </div>
             </div>
-
             <div>
               <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
                 Session Start
               </div>
               <div className="mt-1">
-                <span className="text-sm">{formatTimestamp(transaction.session_start_time)}</span>
+                <span className="text-sm">
+                  {formatTimestamp(transaction.session_start_time)}
+                </span>
               </div>
             </div>
           </div>
@@ -301,32 +305,44 @@ export function FailureDetails({ transaction }: FailureDetailsProps) {
           <CardDescription>AI-gestützte Hilfe zur Problemlösung</CardDescription>
         </CardHeader>
         <CardContent>
-          {!showResolutionGuide ? (
-            <Button 
-              onClick={() => setShowResolutionGuide(true)}
-              className="w-full"
-              variant="outline"
-            >
+          {isGenerating ? (
+            <div className="text-center p-4 bg-muted/50 rounded">
+              <Loader2 className="animate-spin mx-auto mb-2" />
+              <p className="text-sm text-muted-foreground">Generiere Lösung…</p>
+            </div>
+          ) : explanation ? (
+            <div className="space-y-4">
+              <div>
+                <h4 className="font-medium">Einfach erklärt</h4>
+                <p className="mt-1 text-sm">{explanation}</p>
+              </div>
+              <div>
+                <h4 className="font-medium">Drei Best Practices</h4>
+                <ol className="list-decimal list-inside text-sm space-y-1">
+                  {fixes.map((f, i) => (
+                    <li key={i}>{f}</li>
+                  ))}
+                </ol>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setExplanation(null)
+                  setFixes([])
+                }}
+              >
+                Schließen
+              </Button>
+            </div>
+          ) : (
+            <Button className="w-full" variant="outline" onClick={handleGenerate}>
               <AlertTriangle className="w-4 h-4 mr-2" />
               AI Resolution Guide generieren
             </Button>
-                     ) : (
-             <div className="text-center p-4 bg-muted/50 rounded">
-               <p className="text-sm text-muted-foreground">
-                 AI Resolution Guide wird generiert...
-               </p>
-               <Button 
-                 variant="ghost" 
-                 size="sm" 
-                 className="mt-2"
-                 onClick={() => setShowResolutionGuide(false)}
-               >
-                 Schließen
-               </Button>
-             </div>
-           )}
+          )}
         </CardContent>
       </Card>
     </div>
   )
-} 
+}

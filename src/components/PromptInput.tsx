@@ -27,32 +27,32 @@ interface PromptInputProps {
 const QUICK_ACTIONS = [
   {
     icon: TrendingUp,
-    label: 'Trend-Analyse',
-    prompt: 'Zeige mir die Trends der letzten 30 Tage'
+    label: 'Zahlungsvolumen',
+    prompt: 'Zeige mir das Zahlungsvolumen der letzten 30 Tage'
   },
   {
     icon: PieChart,
-    label: 'Verteilung',
-    prompt: 'Erstelle eine Verteilungsanalyse der wichtigsten Kategorien'
+    label: 'Krypto-Transaktionen',
+    prompt: 'Analysiere die Verteilung der Kryptowährungen nach Token-Typ'
   },
   {
     icon: BarChart3,
-    label: 'Vergleich',
-    prompt: 'Vergleiche die Performance zwischen verschiedenen Bereichen'
+    label: 'Merchant-Vergleich',
+    prompt: 'Vergleiche die Zahlungsvolumen zwischen verschiedenen Händlern'
   },
   {
     icon: Clock,
-    label: 'Zeitraum',
-    prompt: 'Analysiere die Entwicklung über die letzten 12 Monate'
+    label: 'Zeitliche Entwicklung',
+    prompt: 'Analysiere die Entwicklung der Zahlungsströme über die letzten 6 Monate'
   }
 ]
 
 const EXAMPLE_PROMPTS = [
-  'Zeige mir die Umsatzentwicklung der letzten 6 Monate',
-  'Welche Produktkategorien haben die höchste Konversionsrate?',
-  'Erstelle eine Analyse der Kundensegmente nach Regionen',
-  'Wie hat sich die Performance im Vergleich zum Vorjahr entwickelt?',
-  'Zeige mir die Top 10 Produkte nach Verkaufszahlen'
+  'Wie viele eindeutige Benutzer haben Zahlungen getätigt?',
+  'Zeige mir das durchschnittliche Zahlungsvolumen pro Benutzer',
+  'Welche Kryptowährungen werden am häufigsten gehandelt?',
+  'Analysiere die Zahlungsströme nach Gerätetyp und Sprache',
+  'Vergleiche die KYC-Status zwischen verschiedenen Benutzertiers'
 ]
 
 export function PromptInput({ onSubmit, isLoading = false, suggestions = [], placeholder }: PromptInputProps) {
