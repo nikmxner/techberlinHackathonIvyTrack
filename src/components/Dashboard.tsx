@@ -53,44 +53,43 @@ export function Dashboard() {
     setCurrentPrompt(prompt)
 
     try {
-      // Step 1: Generate SQL from prompt
-      const generateResponse = await fetch('/api/generate-query', {
+      // Call the MCP Query API with the user prompt
+      const executeStart = Date.now()
+      const mcpResponse = await fetch('/api/mcp-query', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt })
       })
 
-      if (!generateResponse.ok) {
-        throw new Error('Failed to generate SQL query')
+      if (!mcpResponse.ok) {
+        const errorData = await mcpResponse.json()
+        throw new Error(errorData.error || 'Failed to execute MCP query')
       }
 
-      const { sqlQuery, explanation, suggestedCharts } = await generateResponse.json()
-      setCurrentSQL(sqlQuery)
-
-      // Step 2: Execute the generated SQL
-      const executeStart = Date.now()
-      const executeResponse = await fetch('/api/execute-query', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sqlQuery })
-      })
-
-      if (!executeResponse.ok) {
-        const errorData = await executeResponse.json()
-        throw new Error(errorData.error || 'Failed to execute query')
-      }
-
-      const queryResult: QueryResult = await executeResponse.json()
+      const mcpResult = await mcpResponse.json()
       const executionTimeMs = Date.now() - executeStart
       setExecutionTime(executionTimeMs)
 
-      // Step 3: Create charts based on suggestions and data
-      const charts: ChartConfig[] = suggestedCharts.map((chart: any, index: number) => ({
-        ...chart,
-        title: chart.title || `Chart ${index + 1}`
-      }))
+      // Set the SQL query from MCP response
+      setCurrentSQL(mcpResult.query || 'Generated SQL query')
 
-      // Auto-generate additional charts based on data structure
+      // Create QueryResult object from MCP response
+      const queryResult: QueryResult = {
+        data: mcpResult.data || [],
+        columns: mcpResult.metadata?.columns || [],
+        rowCount: mcpResult.metadata?.rowCount || 0,
+        executionTime: executionTimeMs
+      }
+
+      // Create charts based on MCP visualization suggestions
+      const charts: ChartConfig[] = mcpResult.visualization?.suggestedCharts?.map((chartType: string, index: number) => ({
+        type: chartType as any,
+        title: `${chartType.charAt(0).toUpperCase() + chartType.slice(1)} Chart`,
+        xAxis: queryResult.columns[0] || 'x',
+        yAxis: queryResult.columns[1] || 'y'
+      })) || []
+
+      // Auto-generate additional charts based on data structure if no suggestions
       if (queryResult.columns.length >= 2 && charts.length === 0) {
         const xAxis = queryResult.columns[0]
         const yAxis = queryResult.columns.find(col => 
@@ -99,41 +98,31 @@ export function Dashboard() {
 
         charts.push({
           type: 'bar',
-          xAxis,
-          yAxis,
-          title: `${yAxis} nach ${xAxis}`
+          title: `${yAxis} by ${xAxis}`,
+          xAxis: xAxis,
+          yAxis: yAxis
         })
-
-        if (queryResult.columns.length >= 3) {
-          const thirdColumn = queryResult.columns[2]
-          charts.push({
-            type: 'line',
-            xAxis,
-            yAxis: thirdColumn,
-            title: `${thirdColumn} Trend`
-          })
-        }
       }
 
       setDashboardState({
         queryResult,
         charts,
-        isLoading: false,
-        error: undefined
+        isLoading: false
       })
 
       // Add to history
-      await addPrompt({
+      addPrompt({
         prompt,
-        sqlQuery,
-        status: 'success',
+        sqlQuery: mcpResult.query || '',
         executionTime: executionTimeMs,
+        status: 'success',
         resultCount: queryResult.rowCount,
         chartTypes: charts.map(c => c.type),
         isFavorite: false
       })
 
     } catch (error) {
+      console.error('MCP Query error:', error)
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred'
       
       setDashboardState({
@@ -142,9 +131,11 @@ export function Dashboard() {
         error: errorMessage
       })
 
-      // Add failed attempt to history
-      await addPrompt({
+      // Add failed prompt to history
+      addPrompt({
         prompt,
+        sqlQuery: '',
+        executionTime: 0,
         status: 'error',
         isFavorite: false
       })

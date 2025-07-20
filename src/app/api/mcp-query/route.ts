@@ -202,42 +202,50 @@ export async function POST(request: NextRequest) {
 
         if (results && results.success && results.data) {
             try {
-                // Try to parse the workflow result data
-                const workflowData = results.data
+                // Superglue returns perfectly structured data in results.data
+                const superglueData = results.data
                 
-                // Extract SQL query from workflow steps if available
+                // Debug: Log the exact structure we're working with
+                console.log('🚀 SUPERGLUE DATA STRUCTURE:')
+                console.log('superglueData:', JSON.stringify(superglueData, null, 2))
+                console.log('superglueData.data length:', superglueData.data ? superglueData.data.length : 'NO DATA')
+                console.log('superglueData.data sample:', superglueData.data ? superglueData.data[0] : 'NO DATA')
+                
+                // Extract SQL from config steps for display
                 let actualQuery = "Generated SQL query"
-                if (results.config && results.config.steps && results.config.steps.length > 0) {
-                    // Look for SQL query in the workflow steps
-                    const sqlStep = results.config.steps.find((step: any) => 
-                        step.apiConfig && step.apiConfig.body && 
-                        step.apiConfig.body.toLowerCase().includes('select')
-                    )
-                    if (sqlStep && sqlStep.apiConfig.body) {
-                        try {
-                            // Try to parse the body as JSON and extract the query
-                            const bodyObj = JSON.parse(sqlStep.apiConfig.body)
-                            actualQuery = bodyObj.query || sqlStep.apiConfig.body
-                        } catch {
-                            // If not JSON, use the body directly
-                            actualQuery = sqlStep.apiConfig.body
+                if (results.config && results.config.steps) {
+                    for (const step of results.config.steps) {
+                        if (step.apiConfig && step.apiConfig.body) {
+                            try {
+                                const bodyObj = JSON.parse(step.apiConfig.body)
+                                if (bodyObj.query && bodyObj.query.trim().toLowerCase().startsWith('select')) {
+                                    actualQuery = bodyObj.query
+                                }
+                            } catch {
+                                // Continue searching
+                            }
                         }
                     }
                 }
                 
+                // Use Superglue's structured response directly
                 response = {
                     prompt: body.prompt,
-                    query: actualQuery,
-                    data: workflowData.data || [],
+                    query: superglueData.query || actualQuery,
+                    data: superglueData.data || [],
                     metadata: {
-                        rowCount: workflowData.metadata?.rowCount || 0,
-                        columns: workflowData.metadata?.columns || [],
-                        dataTypes: workflowData.metadata?.dataTypes || [],
+                        rowCount: superglueData.metadata?.rowCount || (superglueData.data ? superglueData.data.length : 0),
+                        columns: superglueData.metadata?.columns || (superglueData.data && superglueData.data[0] ? Object.keys(superglueData.data[0]) : []),
+                        dataTypes: superglueData.metadata?.dataTypes || [],
                         executionTime: executionTime
                     },
                     visualization: {
-                        suggestedCharts: workflowData.visualization?.suggestedCharts || ["table"],
-                        chartConfig: workflowData.visualization?.chartConfig || {}
+                        suggestedCharts: superglueData.visualization?.suggestedCharts || ["bar", "line", "table"],
+                        chartConfig: superglueData.visualization?.chartConfig || {
+                            type: "bar",
+                            xAxis: superglueData.data && superglueData.data[0] ? Object.keys(superglueData.data[0])[0] : 'x',
+                            yAxis: superglueData.data && superglueData.data[0] ? Object.keys(superglueData.data[0])[1] : 'y'
+                        }
                     }
                 }
             } catch (parseError) {
